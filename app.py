@@ -1,11 +1,21 @@
 from fastapi import FastAPI, Depends, HTTPException
 import httpx
 from typing import Optional, Dict, Any
+import os
+from fastapi.security import APIKeyHeader
 
 API_KEY = "b320b4d35b154cb784259e15d9fa5e78"  # Fill in with your API Key
 ENDPOINT_URL = "https://api-v3.mbta.com/"  # DO NOT CHANGE THIS
 
-app = FastAPI()  # Initialize the end point
+# ---- API Key Security for ALL endpoints ----
+CLIENT_API_KEY = os.getenv("CLIENT_API_KEY", "changeme123")
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def require_api_key(api_key: str = Depends(api_key_header)):
+    if api_key != CLIENT_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+app = FastAPI(dependencies=[Depends(require_api_key)])  # Initialize the end point
 
 
 # Helper: always attach api_key + perform GET request
@@ -19,11 +29,20 @@ async def mbta_get(path: str, params: Optional[Dict[str, str]] = None) -> Dict[s
     params.update(_auth_params())
 
     async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.get(f"{ENDPOINT_URL}{path}", params=params)
-        if response.status_code == 404:
-            raise HTTPException(status_code=404, detail="Not found")
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = await client.get(f"{ENDPOINT_URL}{path}", params=params)
+            if response.status_code == 404:
+                raise HTTPException(status_code=404, detail="Not found")
+            response.raise_for_status()
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            # If MBTA returns 401/403/429/etc., pass it through cleanly (no more 500)
+            raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+
+        except httpx.RequestError as e:
+            # Network/DNS/timeout issues
+            raise HTTPException(status_code=502, detail=f"Upstream request failed: {str(e)}")
 
 
 @app.get("/")  # Create a default route
