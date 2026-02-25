@@ -10,6 +10,7 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 async def require_api_key(api_key: str = Depends(api_key_header)):
     if api_key != CLIENT_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    return api_key
 
 app = FastAPI(dependencies=[Depends(require_api_key)])
 
@@ -24,7 +25,7 @@ SERVICE_MAP = {
 async def root():
     return {"message": "MBTA API Gateway (proxy)", "services": SERVICE_MAP}
 
-async def _proxy(service_name: str, path: str, request: Request):
+async def _proxy(service_name: str, path: str, request: Request, api_key: str):
     if service_name not in SERVICE_MAP:
         raise HTTPException(status_code=404, detail="Service not found")
 
@@ -38,7 +39,7 @@ async def _proxy(service_name: str, path: str, request: Request):
 
     async with httpx.AsyncClient(timeout=30) as client:
         try:
-            resp = await client.get(url, params=params)
+            resp = await client.get(url, params=params, headers={"X-API-Key": api_key})
         except httpx.RequestError as e:
             # microservice offline / connection issue
             raise HTTPException(status_code=502, detail=f"Upstream service unreachable: {str(e)}")
@@ -57,36 +58,36 @@ async def _proxy(service_name: str, path: str, request: Request):
 
 # ROUTES service
 @app.get("/routes")
-async def gateway_routes(request: Request):
-    return await _proxy("routes", "/routes", request)
+async def gateway_routes(request: Request, api_key: str = Depends(require_api_key)):
+    return await _proxy("routes", "/routes", request, api_key)
 
 @app.get("/routes/{route_id}")
-async def gateway_route_by_id(route_id: str, request: Request):
-    return await _proxy("routes", f"/routes/{route_id}", request)
+async def gateway_route_by_id(route_id: str, request: Request, api_key: str = Depends(require_api_key)):
+    return await _proxy("routes", f"/routes/{route_id}", request, api_key)
 
 # LINES service
 @app.get("/lines")
-async def gateway_lines(request: Request):
-    return await _proxy("lines", "/lines", request)
+async def gateway_lines(request: Request, api_key: str = Depends(require_api_key)):
+    return await _proxy("lines", "/lines", request, api_key)
 
 @app.get("/lines/{line_id}")
-async def gateway_line_by_id(line_id: str, request: Request):
-    return await _proxy("lines", f"/lines/{line_id}", request)
+async def gateway_line_by_id(line_id: str, request: Request, api_key: str = Depends(require_api_key)):
+    return await _proxy("lines", f"/lines/{line_id}", request, api_key)
 
 # ALERTS service
 @app.get("/alerts")
-async def gateway_alerts(request: Request):
-    return await _proxy("alerts", "/alerts", request)
+async def gateway_alerts(request: Request, api_key: str = Depends(require_api_key)):
+    return await _proxy("alerts", "/alerts", request, api_key)
 
 @app.get("/alerts/{alert_id}")
-async def gateway_alert_by_id(alert_id: str, request: Request):
-    return await _proxy("alerts", f"/alerts/{alert_id}", request)
+async def gateway_alert_by_id(alert_id: str, request: Request, api_key: str = Depends(require_api_key)):
+    return await _proxy("alerts", f"/alerts/{alert_id}", request, api_key)
 
 # VEHICLES service
 @app.get("/vehicles")
-async def gateway_vehicles(request: Request):
-    return await _proxy("vehicles", "/vehicles", request)
+async def gateway_vehicles(request: Request, api_key: str = Depends(require_api_key)):
+    return await _proxy("vehicles", "/vehicles", request, api_key)
 
 @app.get("/vehicles/{vehicle_id}")
-async def gateway_vehicle_by_id(vehicle_id: str, request: Request):
-    return await _proxy("vehicles", f"/vehicles/{vehicle_id}", request)
+async def gateway_vehicle_by_id(vehicle_id: str, request: Request, api_key: str = Depends(require_api_key)):
+    return await _proxy("vehicles", f"/vehicles/{vehicle_id}", request, api_key)

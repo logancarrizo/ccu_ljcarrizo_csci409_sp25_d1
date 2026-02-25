@@ -23,6 +23,7 @@ def _auth_params() -> Dict[str, str]:
 async def mbta_get(path: str, params: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     params = params or {}
     params.update(_auth_params())
+    path = path.lstrip("/")
     async with httpx.AsyncClient(timeout=20) as client:
         try:
             r = await client.get(f"{ENDPOINT_URL}{path}", params=params)
